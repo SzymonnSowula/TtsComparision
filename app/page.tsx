@@ -1,584 +1,323 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Play, Pause, Square, Download, Settings, Moon, Sun } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ThemeToggle } from "@/components/theme-toggle"
-import { useMatrixTheme } from "@/components/theme-provider"
-import {
-  Mic,
-  Play,
-  Pause,
-  CircleStopIcon as Stop,
-  Settings,
-  Clock,
-  DollarSign,
-  FileAudio,
-  Gauge,
-  Zap,
-  BarChart3,
-  AlertTriangle,
-} from "lucide-react"
-import { generateTTSAudio, type TTSRequest } from "@/lib/tts-services"
-
-interface TTSModel {
-  name: string
-  className: string
-  logo: string
-  apiKey: string
-  status: "ready" | "processing" | "error"
-  generated: boolean
-  color: string
-}
-
-interface TestResult {
-  generationTime: number
-  audioSize: number
-  audioUrl: string
-  success: boolean
-  textLength: number
-  error?: string
-}
-
-const ttsModels: TTSModel[] = [
-  {
-    name: "ElevenLabs",
-    className: "elevenlabs",
-    logo: "11",
-    apiKey: "elevenlabs",
-    status: "ready",
-    generated: false,
-    color: "#ff0040",
-  },
-  {
-    name: "Speechify",
-    className: "speechify",
-    logo: "Sp",
-    apiKey: "speechify",
-    status: "ready",
-    generated: false,
-    color: "#0080ff",
-  },
-  {
-    name: "PlayAI TTS",
-    className: "playai",
-    logo: "PA",
-    apiKey: "playai",
-    status: "ready",
-    generated: false,
-    color: "#ffff00",
-  },
-  {
-    name: "Papla.ai",
-    className: "papla",
-    logo: "PP",
-    apiKey: "papla",
-    status: "ready",
-    generated: false,
-    color: "#ff6600",
-  },
-  {
-    name: "Hume.ai",
-    className: "hume",
-    logo: "HM",
-    apiKey: "hume",
-    status: "ready",
-    generated: false,
-    color: "#9966ff",
-  },
-]
+import { useTheme } from "next-themes"
+import { generateTTSAudio, TTS_SERVICES, type TTSRequest, type TTSResult } from "@/lib/tts-services"
 
 export default function MatrixTTSComparison() {
-  const { theme } = useMatrixTheme()
-  const [text, setText] = useState(
-    "Witaj! To jest przykładowy tekst do testowania jakości syntez mowy. Czy głos brzmi naturalnie? Jak radzi sobie z polskimi znakami diakrytycznymi? Czy intonacja jest odpowiednia dla tego zdania? Testujemy teraz pięć różnych systemów TTS.",
-  )
-  const [language, setLanguage] = useState("pl")
-  const [voiceGender, setVoiceGender] = useState("female")
-  const [models, setModels] = useState<TTSModel[]>(ttsModels)
-  const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null)
-  const [currentModel, setCurrentModel] = useState<number | null>(null)
-  const audioRefs = useRef<(HTMLAudioElement | null)[]>([])
+  const { theme, setTheme } = useTheme()
+  const [text, setText] = useState("Hello, this is a test of text-to-speech synthesis.")
+  const [language, setLanguage] = useState("en")
+  const [voiceGender, setVoiceGender] = useState<"male" | "female">("female")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [results, setResults] = useState<TTSResult[]>([])
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null)
+  const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({})
 
-  const checkApiKeysAvailability = () => {
-    const keys = {
-      elevenlabs: process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY,
-      speechify: process.env.NEXT_PUBLIC_SPEECHIFY_API_KEY,
-      playai: process.env.NEXT_PUBLIC_PLAYAI_API_KEY,
-      papla: process.env.NEXT_PUBLIC_PAPLA_API_KEY,
-      hume: process.env.NEXT_PUBLIC_HUME_API_KEY,
+  const handleGenerate = async () => {
+    if (!text.trim()) return
+
+    setIsGenerating(true)
+    setResults([])
+
+    const request: TTSRequest = {
+      text: text.trim(),
+      language,
+      voiceGender,
     }
 
-    return Object.values(keys).filter(Boolean).length
-  }
+    const newResults: TTSResult[] = []
 
-  const generateForModel = async (index: number) => {
-    if (!text.trim()) {
-      showNotification("⚠️ BŁĄD: BRAK DANYCH WEJŚCIOWYCH!", "error")
-      return
-    }
-
-    const model = models[index]
-
-    setModels((prev) => prev.map((m, i) => (i === index ? { ...m, status: "processing" as const } : m)))
-
-    try {
-      const request: TTSRequest = {
-        text,
-        language,
-        voiceGender,
+    for (const service of TTS_SERVICES) {
+      try {
+        console.log(`Generating audio for ${service.name}...`)
+        const result = await generateTTSAudio(service.id, request)
+        newResults.push({
+          ...result,
+          service: service.name,
+        })
+      } catch (error) {
+        console.error(`Error generating audio for ${service.name}:`, error)
+        newResults.push({
+          audioUrl: "",
+          audioBlob: new Blob(),
+          generationTime: 0,
+          audioSize: 0,
+          success: false,
+          textLength: request.text.length,
+          service: service.name,
+          error: error instanceof Error ? error.message : "Unknown error",
+        })
       }
+    }
 
-      const result = await generateTTSAudio(model.className, request)
+    setResults(newResults)
+    setIsGenerating(false)
+  }
 
-      if (result.success) {
-        setTestResults((prev) => ({
-          ...prev,
-          [model.name]: {
-            generationTime: result.generationTime,
-            audioSize: result.audioSize,
-            audioUrl: result.audioUrl,
-            success: true,
-            textLength: text.length,
-          },
-        }))
+  const handlePlayPause = (serviceId: string, audioUrl: string) => {
+    if (!audioUrl) return
 
-        setModels((prev) => prev.map((m, i) => (i === index ? { ...m, status: "ready" as const, generated: true } : m)))
+    const audioKey = `${serviceId}-audio`
 
-        showNotification(
-          `✅ ${model.name.toUpperCase()}: SYNTEZA UKOŃCZONA W ${(result.generationTime / 1000).toFixed(1)}S`,
-        )
-      } else {
-        throw new Error(result.error || "Nieznany błąd")
+    if (playingAudio === audioKey) {
+      // Pause current audio
+      if (audioRefs.current[audioKey]) {
+        audioRefs.current[audioKey].pause()
       }
-    } catch (error) {
-      console.error(`Błąd generacji dla ${model.name}:`, error)
-      setModels((prev) => prev.map((m, i) => (i === index ? { ...m, status: "error" as const } : m)))
-      showNotification(
-        `❌ ${model.name.toUpperCase()}: ${error instanceof Error ? error.message : "BŁĄD SYSTEMU"}`,
-        "error",
-      )
-    }
-  }
-
-  const generateForAllModels = () => {
-    if (!text.trim()) {
-      showNotification("⚠️ BŁĄD: BRAK DANYCH WEJŚCIOWYCH!", "error")
-      return
-    }
-
-    showNotification("🚀 URUCHAMIANIE WSZYSTKICH SYSTEMÓW...")
-
-    models.forEach((_, index) => {
-      setTimeout(() => {
-        generateForModel(index)
-      }, index * 1000)
-    })
-  }
-
-  const playModel = (index: number) => {
-    const result = testResults[models[index].name]
-    if (!result) {
-      showNotification("⚠️ NAJPIERW URUCHOM SYNTEZĘ DLA TEGO SYSTEMU")
-      return
-    }
-
-    if (currentAudio && currentAudio !== audioRefs.current[index]) {
-      currentAudio.pause()
-      currentAudio.currentTime = 0
-    }
-
-    const audio = audioRefs.current[index]
-    if (!audio) return
-
-    if (audio.paused) {
-      audio.src = result.audioUrl
-      audio.play()
-      setCurrentAudio(audio)
-      setCurrentModel(index)
+      setPlayingAudio(null)
     } else {
-      audio.pause()
-      setCurrentAudio(null)
-      setCurrentModel(null)
-    }
-  }
-
-  const stopAllAudio = () => {
-    audioRefs.current.forEach((audio) => {
-      if (audio) {
-        audio.pause()
-        audio.currentTime = 0
+      // Stop any currently playing audio
+      if (playingAudio && audioRefs.current[playingAudio]) {
+        audioRefs.current[playingAudio].pause()
+        audioRefs.current[playingAudio].currentTime = 0
       }
-    })
-    setCurrentAudio(null)
-    setCurrentModel(null)
-    showNotification("⏹️ WSZYSTKIE SYSTEMY ZATRZYMANE")
-  }
 
-  const showNotification = (message: string, type: "success" | "error" | "warning" = "success") => {
-    console.log(`${type.toUpperCase()}: ${message}`)
-  }
+      // Create or get audio element
+      if (!audioRefs.current[audioKey]) {
+        audioRefs.current[audioKey] = new Audio(audioUrl)
+        audioRefs.current[audioKey].addEventListener("ended", () => {
+          setPlayingAudio(null)
+        })
+      }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "ready":
-        return "bg-green-500"
-      case "processing":
-        return "bg-yellow-500"
-      case "error":
-        return "bg-red-500"
-      default:
-        return "bg-gray-500"
+      // Play new audio
+      audioRefs.current[audioKey].play()
+      setPlayingAudio(audioKey)
     }
   }
 
-  const getQualityRating = (className: string) => {
-    const ratings: Record<string, string> = {
-      elevenlabs: "NAJWYŻSZA [5/5]",
-      speechify: "ŚREDNIA [3/5]",
-      playai: "DOBRA [4/5]",
-      papla: "WYSOKA [4/5]",
-      hume: "ZAAWANSOWANA [5/5]",
+  const handleStop = (serviceId: string) => {
+    const audioKey = `${serviceId}-audio`
+    if (audioRefs.current[audioKey]) {
+      audioRefs.current[audioKey].pause()
+      audioRefs.current[audioKey].currentTime = 0
     }
-    return ratings[className] || "NIEOKREŚLONA"
+    if (playingAudio === audioKey) {
+      setPlayingAudio(null)
+    }
   }
 
-  const generatedCount = Object.keys(testResults).length
-  const totalTime = Object.values(testResults).reduce((sum, r) => sum + r.generationTime, 0)
-  const avgTime = generatedCount > 0 ? totalTime / generatedCount : 0
-  const availableApiKeys = checkApiKeysAvailability()
+  const handleDownload = (result: TTSResult) => {
+    if (!result.audioUrl) return
+
+    const link = document.createElement("a")
+    link.href = result.audioUrl
+    link.download = `${result.service.toLowerCase()}-tts-${Date.now()}.mp3`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 B"
+    const k = 1024
+    const sizes = ["B", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  const formatTime = (ms: number) => {
+    return `${(ms / 1000).toFixed(2)}s`
+  }
 
   return (
-    <div className="min-h-screen bg-matrix-bg text-matrix-text font-mono transition-all duration-300">
-      {/* Matrix background effect */}
-      <div className="fixed inset-0 opacity-10 pointer-events-none">
-        <div
-          className={`absolute inset-0 ${
-            theme === "dark"
-              ? "bg-gradient-to-br from-black via-green-900/20 to-black"
-              : "bg-gradient-to-br from-white via-green-50 to-white"
-          }`}
-        ></div>
-      </div>
+    <div className="matrix-bg min-h-screen">
+      <div className="matrix-rain"></div>
 
-      <div className="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
-        {/* Header with Theme Toggle */}
-        <header className="text-center mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex-1"></div>
-            <div className="flex items-center justify-center gap-4">
-              <Mic className="w-10 h-10 text-matrix-green animate-pulse" />
-              <h1 className="text-4xl md:text-5xl font-bold text-matrix-green tracking-wider animate-matrix-glow">
-                MATRIX TTS COMPARISON
-              </h1>
-            </div>
-            <div className="flex-1 flex justify-end">
-              <ThemeToggle />
-            </div>
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold matrix-text mb-2">Matrix TTS Comparison</h1>
+            <p className="text-gray-400">Compare text-to-speech quality across multiple providers</p>
           </div>
-          <div className="text-lg text-matrix-text-secondary tracking-[4px] uppercase">
-            ELEVENLABS • SPEECHIFY • PLAYAI • PAPLA.AI • HUME.AI
-          </div>
-        </header>
 
-        {/* API Keys Status Alert */}
-        {availableApiKeys < 5 && (
-          <Alert
-            className={`mb-8 ${
-              theme === "dark" ? "border-yellow-500 bg-yellow-900/20" : "border-yellow-400 bg-yellow-50"
-            }`}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="theme-toggle"
           >
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className={theme === "dark" ? "text-yellow-300" : "text-yellow-800"}>
-              <strong>UWAGA:</strong> Skonfigurowano {availableApiKeys}/5 kluczy API. Niektóre serwisy mogą nie działać
-              poprawnie. Sprawdź plik .env.local
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Control Panel */}
-        <Card className="bg-matrix-card-bg border-matrix-border mb-8 shadow-lg">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-3 h-3 rounded-full ${availableApiKeys === 5 ? "bg-green-500" : "bg-red-500"} animate-pulse`}
-                ></div>
-                <span className="text-sm text-matrix-text-secondary">
-                  {availableApiKeys === 5
-                    ? "WSZYSTKIE PROTOKOŁY SKONFIGUROWANE"
-                    : `PROTOKOŁY: ${availableApiKeys}/5 AKTYWNE`}
-                </span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-matrix-green mb-2">DANE WEJŚCIOWE DO ANALIZY:</label>
-              <Textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="bg-matrix-bg border-matrix-border text-matrix-text min-h-[120px] focus:border-matrix-green"
-                placeholder="Wprowadź tekst do procesowania..."
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-matrix-green mb-2">PROTOKÓŁ JĘZYKOWY:</label>
-                <Select value={language} onValueChange={setLanguage}>
-                  <SelectTrigger className="bg-matrix-bg border-matrix-border text-matrix-text">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-matrix-card-bg border-matrix-border">
-                    <SelectItem value="pl">Polski [PL]</SelectItem>
-                    <SelectItem value="en">English [EN]</SelectItem>
-                    <SelectItem value="de">Deutsch [DE]</SelectItem>
-                    <SelectItem value="es">Español [ES]</SelectItem>
-                    <SelectItem value="fr">Français [FR]</SelectItem>
-                    <SelectItem value="it">Italiano [IT]</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-matrix-green mb-2">PROFIL GŁOSU:</label>
-                <Select value={voiceGender} onValueChange={setVoiceGender}>
-                  <SelectTrigger className="bg-matrix-bg border-matrix-border text-matrix-text">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-matrix-card-bg border-matrix-border">
-                    <SelectItem value="female">Kobieta [F]</SelectItem>
-                    <SelectItem value="male">Mężczyzna [M]</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-4 justify-center">
-              <Button
-                onClick={generateForAllModels}
-                className="bg-matrix-green hover:bg-matrix-dark-green text-matrix-bg font-bold"
-              >
-                <Play className="w-4 h-4 mr-2" />
-                URUCHOM WSZYSTKIE SYSTEMY
-              </Button>
-              <Button
-                onClick={stopAllAudio}
-                variant="outline"
-                className="border-matrix-border text-matrix-text hover:bg-matrix-dark-bg bg-transparent"
-              >
-                <Stop className="w-4 h-4 mr-2" />
-                ZATRZYMAJ WSZYSTKIE
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Models Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-          {models.map((model, index) => {
-            const result = testResults[model.name]
-            return (
-              <Card
-                key={model.name}
-                className="bg-matrix-card-bg border-matrix-border hover:border-matrix-green transition-all shadow-lg hover:shadow-xl"
-              >
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-                        style={{ backgroundColor: model.color, boxShadow: `0 0 15px ${model.color}` }}
-                      >
-                        {model.logo}
-                      </div>
-                      <span className="text-matrix-green font-bold text-lg">{model.name.toUpperCase()}</span>
-                    </div>
-                    <Badge className={`${getStatusColor(model.status)} text-black`}>
-                      {model.status === "ready" && "SYSTEM GOTOWY"}
-                      {model.status === "processing" && "PROCESOWANIE..."}
-                      {model.status === "error" && "BŁĄD SYSTEMU"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button
-                    onClick={() => generateForModel(index)}
-                    disabled={model.status === "processing"}
-                    className={`w-full ${
-                      model.generated
-                        ? "bg-matrix-green hover:bg-matrix-dark-green"
-                        : "bg-matrix-green/80 hover:bg-matrix-green"
-                    } text-matrix-bg font-bold`}
-                  >
-                    {model.status === "processing" ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-matrix-bg border-t-transparent rounded-full animate-spin mr-2" />
-                        PROCESOWANIE...
-                      </>
-                    ) : model.generated ? (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        SYNTEZA UKOŃCZONA!
-                      </>
-                    ) : (
-                      <>
-                        <Settings className="w-4 h-4 mr-2" />
-                        URUCHOM SYNTEZĘ
-                      </>
-                    )}
-                  </Button>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <Button
-                        size="sm"
-                        onClick={() => playModel(index)}
-                        disabled={!result}
-                        className="w-12 h-12 rounded-full bg-matrix-green hover:bg-matrix-dark-green text-matrix-bg"
-                      >
-                        {currentModel === index && currentAudio && !currentAudio.paused ? (
-                          <Pause className="w-5 h-5" />
-                        ) : (
-                          <Play className="w-5 h-5" />
-                        )}
-                      </Button>
-                      <div className="flex-1">
-                        <div className="text-matrix-green font-medium">
-                          {result ? "GOTOWE DO ODTWORZENIA" : "NAJPIERW URUCHOM SYNTEZĘ"}
-                        </div>
-                        <div className="text-matrix-text-secondary text-sm">
-                          JAKOŚĆ: {getQualityRating(model.className)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <audio
-                      ref={(el) => {
-                        audioRefs.current[index] = el
-                      }}
-                      onEnded={() => {
-                        setCurrentAudio(null)
-                        setCurrentModel(null)
-                      }}
-                      className="w-full"
-                      controls
-                      style={{ display: result ? "block" : "none" }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-2 text-matrix-text-secondary">
-                      <Clock className="w-3 h-3" />
-                      <span>CZAS: {result ? `${(result.generationTime / 1000).toFixed(1)}S` : "-"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-matrix-text-secondary">
-                      <DollarSign className="w-3 h-3" />
-                      <span>KOSZT: -</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-matrix-text-secondary">
-                      <FileAudio className="w-3 h-3" />
-                      <span>ROZMIAR: {result ? `${(result.audioSize / 1024).toFixed(1)}KB` : "-"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-matrix-text-secondary">
-                      <Gauge className="w-3 h-3" />
-                      <span>
-                        PRĘDKOŚĆ:{" "}
-                        {result ? `${((result.textLength / result.generationTime) * 1000).toFixed(0)} ZN/S` : "-"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Error display */}
-                  {model.status === "error" && (
-                    <Alert
-                      className={`${theme === "dark" ? "border-red-500 bg-red-900/20" : "border-red-400 bg-red-50"}`}
-                    >
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription className={theme === "dark" ? "text-red-300" : "text-red-800"}>
-                        Błąd podczas generacji audio. Sprawdź klucz API i połączenie internetowe.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
         </div>
 
-        {/* Real-time Statistics */}
-        <Card className="bg-matrix-card-bg border-matrix-border mb-8 shadow-lg">
-          <CardHeader>
-            <h2 className="text-2xl font-bold text-matrix-green text-center tracking-wider">
-              <BarChart3 className="w-6 h-6 inline mr-2" />
-              ANALIZA 5 SYSTEMÓW W CZASIE RZECZYWISTYM
-            </h2>
-          </CardHeader>
-          <CardContent>
-            {generatedCount === 0 ? (
-              <p className="text-center text-matrix-text-secondary">
-                Uruchom generację w poszczególnych systemach aby zobaczyć analizę
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-matrix-dark-bg rounded-lg border border-matrix-border">
-                  <h3 className="text-matrix-green font-bold mb-2">📊 SYSTEMÓW PRZETESTOWANYCH</h3>
-                  <div className="text-3xl font-bold text-matrix-green">{generatedCount}/5</div>
-                  <div className="text-matrix-text-secondary text-sm">PROTOKOŁÓW</div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Input Panel */}
+          <div className="lg:col-span-1">
+            <Card className="card-matrix">
+              <CardHeader>
+                <CardTitle className="matrix-text">Input Configuration</CardTitle>
+                <CardDescription>Configure your text-to-speech parameters</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <Label htmlFor="text" className="matrix-text">
+                    Text to Synthesize
+                  </Label>
+                  <Textarea
+                    id="text"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Enter the text you want to convert to speech..."
+                    className="input-matrix mt-2"
+                    rows={4}
+                  />
                 </div>
-                <div className="text-center p-4 bg-matrix-dark-bg rounded-lg border border-matrix-border">
-                  <h3 className="text-matrix-green font-bold mb-2">⚡ NAJSZYBSZY SYSTEM</h3>
-                  <div className="text-3xl font-bold text-matrix-green">
-                    {generatedCount > 0
-                      ? Object.keys(testResults)
-                          .reduce((a, b) => (testResults[a].generationTime < testResults[b].generationTime ? a : b))
-                          .toUpperCase()
-                      : "-"}
-                  </div>
-                  <div className="text-matrix-text-secondary text-sm">
-                    {generatedCount > 0
-                      ? `${(Math.min(...Object.values(testResults).map((r) => r.generationTime)) / 1000).toFixed(1)}S`
-                      : "-"}
-                  </div>
-                </div>
-                <div className="text-center p-4 bg-matrix-dark-bg rounded-lg border border-matrix-border">
-                  <h3 className="text-matrix-green font-bold mb-2">⏱️ ŚREDNI CZAS</h3>
-                  <div className="text-3xl font-bold text-matrix-green">{(avgTime / 1000).toFixed(1)}S</div>
-                  <div className="text-matrix-text-secondary text-sm">GENERACJA</div>
-                </div>
-                <div className="text-center p-4 bg-matrix-dark-bg rounded-lg border border-matrix-border">
-                  <h3 className="text-matrix-green font-bold mb-2">💾 ŁĄCZNY ROZMIAR</h3>
-                  <div className="text-3xl font-bold text-matrix-green">
-                    {(Object.values(testResults).reduce((sum, r) => sum + r.audioSize, 0) / 1024).toFixed(1)}KB
-                  </div>
-                  <div className="text-matrix-text-secondary text-sm">WSZYSTKICH PLIKÓW</div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Recommendation */}
-        <Card className="bg-matrix-card-bg border-matrix-border shadow-lg">
-          <CardHeader>
-            <h2 className="text-2xl font-bold text-matrix-green text-center tracking-wider">
-              REKOMENDACJA SYSTEMU DOCELOWEGO
-            </h2>
-          </CardHeader>
-          <CardContent>
-            <p className="text-center text-matrix-text-secondary">
-              {generatedCount === 5
-                ? "Wszystkie systemy przetestowane! Analiza rekomendacji zostanie wygenerowana na podstawie wyników."
-                : "Przeprowadź testy wszystkich 5 systemów aby otrzymać spersonalizowaną rekomendację protokołu."}
-            </p>
-          </CardContent>
-        </Card>
+                <div>
+                  <Label htmlFor="language" className="matrix-text">
+                    Language
+                  </Label>
+                  <Select value={language} onValueChange={setLanguage}>
+                    <SelectTrigger className="input-matrix mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="es">Spanish</SelectItem>
+                      <SelectItem value="fr">French</SelectItem>
+                      <SelectItem value="de">German</SelectItem>
+                      <SelectItem value="it">Italian</SelectItem>
+                      <SelectItem value="pt">Portuguese</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="voice" className="matrix-text">
+                    Voice Gender
+                  </Label>
+                  <Select value={voiceGender} onValueChange={(value: "male" | "female") => setVoiceGender(value)}>
+                    <SelectTrigger className="input-matrix mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button onClick={handleGenerate} disabled={isGenerating || !text.trim()} className="btn-matrix w-full">
+                  {isGenerating ? (
+                    <>
+                      <div className="spinner mr-2" />
+                      Generating...
+                    </>
+                  ) : (
+                    "Generate All"
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Results Panel */}
+          <div className="lg:col-span-2">
+            <Card className="card-matrix">
+              <CardHeader>
+                <CardTitle className="matrix-text">Comparison Results</CardTitle>
+                <CardDescription>Audio samples and performance metrics from each TTS provider</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {results.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Configure your settings and click "Generate All" to start comparison</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {results.map((result, index) => {
+                      const service = TTS_SERVICES.find((s) => s.name === result.service)
+                      const audioKey = `${service?.id}-audio`
+                      const isPlaying = playingAudio === audioKey
+
+                      return (
+                        <div key={result.service} className="results-table border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <Badge className={`${service?.color} text-white`}>{result.service}</Badge>
+                              {result.success ? (
+                                <Badge variant="outline" className="text-green-400 border-green-400">
+                                  Success
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-red-400 border-red-400">
+                                  Failed
+                                </Badge>
+                              )}
+                            </div>
+
+                            {result.success && result.audioUrl && (
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handlePlayPause(service?.id || "", result.audioUrl)}
+                                  className="play-button w-8 h-8 p-0"
+                                >
+                                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleStop(service?.id || "")}
+                                  className="w-8 h-8 p-0"
+                                >
+                                  <Square className="h-4 w-4" />
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDownload(result)}
+                                  className="w-8 h-8 p-0"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          {result.success ? (
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-400">Generation Time:</span>
+                                <div className="matrix-text font-mono">{formatTime(result.generationTime)}</div>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">File Size:</span>
+                                <div className="matrix-text font-mono">{formatFileSize(result.audioSize)}</div>
+                              </div>
+                              <div>
+                                <span className="text-gray-400">Characters:</span>
+                                <div className="matrix-text font-mono">{result.textLength}</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-red-400 text-sm">
+                              <strong>Error:</strong> {result.error}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   )

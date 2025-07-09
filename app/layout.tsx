@@ -1,25 +1,28 @@
 import type React from "react"
 import type { Metadata } from "next"
+import { Inter } from "next/font/google"
 import "./globals.css"
-import { MatrixThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider } from "@/components/theme-provider"
+
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Matrix TTS Comparison",
-  description: "Advanced Text-to-Speech comparison system with Matrix UI",
-  generator: "v0.dev",
+  description: "Compare text-to-speech quality across multiple providers",
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
-        <MatrixThemeProvider defaultTheme="dark" storageKey="matrix-ui-theme">
+      <body className={inter.className}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           {children}
-        </MatrixThemeProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -1,7 +1,7 @@
 export interface TTSRequest {
   text: string
   language: string
-  voiceGender: string
+  voiceGender: "male" | "female"
 }
 
 export interface TTSResponse {
@@ -10,6 +10,11 @@ export interface TTSResponse {
   generationTime: number
   audioSize: number
   success: boolean
+  textLength: number
+}
+
+export interface TTSResult extends TTSResponse {
+  service: string
   error?: string
 }
 
@@ -51,6 +56,7 @@ export async function generateElevenLabsAudio(request: TTSRequest): Promise<TTSR
       generationTime,
       audioSize: audioBlob.size,
       success: true,
+      textLength: request.text.length,
     }
   } catch (error) {
     return {
@@ -59,6 +65,7 @@ export async function generateElevenLabsAudio(request: TTSRequest): Promise<TTSR
       generationTime: Date.now() - startTime,
       audioSize: 0,
       success: false,
+      textLength: request.text.length,
       error: error instanceof Error ? error.message : "Unknown error",
     }
   }
@@ -97,6 +104,7 @@ export async function generateSpeechifyAudio(request: TTSRequest): Promise<TTSRe
       generationTime,
       audioSize: audioBlob.size,
       success: true,
+      textLength: request.text.length,
     }
   } catch (error) {
     return {
@@ -105,6 +113,7 @@ export async function generateSpeechifyAudio(request: TTSRequest): Promise<TTSRe
       generationTime: Date.now() - startTime,
       audioSize: 0,
       success: false,
+      textLength: request.text.length,
       error: error instanceof Error ? error.message : "Unknown error",
     }
   }
@@ -150,6 +159,7 @@ export async function generatePlayAIAudio(request: TTSRequest): Promise<TTSRespo
       generationTime,
       audioSize: audioBlob.size,
       success: true,
+      textLength: request.text.length,
     }
   } catch (error) {
     return {
@@ -158,6 +168,7 @@ export async function generatePlayAIAudio(request: TTSRequest): Promise<TTSRespo
       generationTime: Date.now() - startTime,
       audioSize: 0,
       success: false,
+      textLength: request.text.length,
       error: error instanceof Error ? error.message : "Unknown error",
     }
   }
@@ -197,6 +208,7 @@ export async function generatePaplaAudio(request: TTSRequest): Promise<TTSRespon
       generationTime,
       audioSize: audioBlob.size,
       success: true,
+      textLength: request.text.length,
     }
   } catch (error) {
     return {
@@ -205,6 +217,7 @@ export async function generatePaplaAudio(request: TTSRequest): Promise<TTSRespon
       generationTime: Date.now() - startTime,
       audioSize: 0,
       success: false,
+      textLength: request.text.length,
       error: error instanceof Error ? error.message : "Unknown error",
     }
   }
@@ -243,6 +256,7 @@ export async function generateHumeAudio(request: TTSRequest): Promise<TTSRespons
       generationTime,
       audioSize: audioBlob.size,
       success: true,
+      textLength: request.text.length,
     }
   } catch (error) {
     return {
@@ -251,30 +265,37 @@ export async function generateHumeAudio(request: TTSRequest): Promise<TTSRespons
       generationTime: Date.now() - startTime,
       audioSize: 0,
       success: false,
+      textLength: request.text.length,
       error: error instanceof Error ? error.message : "Unknown error",
     }
   }
 }
 
-// Główna funkcja do generowania audio
-import { generateServerTTSAudio } from "@/lib/tts-services-server"
-
+/**
+ * Client-side proxy that calls our secure /api/tts route.
+ * All secrets stay on the server; the browser sees no keys.
+ */
 export async function generateTTSAudio(service: string, request: TTSRequest): Promise<TTSResponse> {
-  // On the client we proxy to our own API route (avoids CORS & hides keys)
-  if (typeof window !== "undefined") {
-    const res = await fetch(`/api/tts?service=${service}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-    })
+  const res = await fetch(`/api/tts?service=${service}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  })
 
-    if (!res.ok) {
-      const { error } = await res.json()
-      throw new Error(error || "Request failed")
-    }
-    return (await res.json()) as TTSResponse
+  if (!res.ok) {
+    const { error } = await res.json()
+    throw new Error(error ?? `HTTP ${res.status}`)
   }
 
-  // Server-side rendering paths may call providers directly
-  return generateServerTTSAudio(service, request)
+  return res.json()
 }
+
+export const TTS_SERVICES = [
+  { id: "elevenlabs", name: "ElevenLabs", color: "bg-purple-500" },
+  { id: "speechify", name: "Speechify", color: "bg-blue-500" },
+  { id: "playai", name: "PlayAI", color: "bg-green-500" },
+  { id: "papla", name: "Papla", color: "bg-orange-500" },
+  { id: "hume", name: "Hume AI", color: "bg-red-500" },
+] as const
+
+export type TTSServiceId = (typeof TTS_SERVICES)[number]["id"]
