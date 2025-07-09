@@ -13,9 +13,8 @@ const config: Config = {
   theme: {
     ...defaultConfig.theme,
     extend: {
-      ...defaultConfig.theme.extend,
+      ...defaultConfig.theme.extend.colors,
       colors: {
-        ...defaultConfig.theme.extend.colors,
         "matrix-green": "#00ff00",
         "matrix-dark-green": "#008800",
         "matrix-light-green": "#88ff88",
@@ -44,6 +43,11 @@ const config: Config = {
           "50%": { textShadow: "0 0 30px #00ff00, 0 0 40px #00ff00" },
           "100%": { textShadow: "0 0 20px #00ff00" },
         },
+      },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
     },
   },
