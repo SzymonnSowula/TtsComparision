@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  /* Dark theme (default Matrix) */
   --matrix-green: #00ff00;
   --matrix-dark-green: #008800;
   --matrix-light-green: #88ff88;
@@ -12,6 +13,27 @@
   --matrix-yellow: #ffff00;
   --matrix-blue: #0080ff;
   --matrix-cyan: #00ffff;
+  --matrix-text: #00ff00;
+  --matrix-text-secondary: #88ff88;
+  --matrix-border: #008800;
+  --matrix-card-bg: #001100;
+}
+
+.light {
+  /* Light theme */
+  --matrix-green: #059669;
+  --matrix-dark-green: #047857;
+  --matrix-light-green: #10b981;
+  --matrix-bg: #ffffff;
+  --matrix-dark-bg: #f8f9fa;
+  --matrix-red: #dc2626;
+  --matrix-yellow: #d97706;
+  --matrix-blue: #2563eb;
+  --matrix-cyan: #0891b2;
+  --matrix-text: #1f2937;
+  --matrix-text-secondary: #6b7280;
+  --matrix-border: #d1d5db;
+  --matrix-card-bg: #ffffff;
 }
 
 * {
@@ -22,14 +44,15 @@
 
 body {
   font-family: "Courier Prime", monospace;
-  background: linear-gradient(135deg, #000000 0%, #001100 50%, #000000 100%);
+  background: var(--matrix-bg);
   min-height: 100vh;
-  color: var(--matrix-green);
+  color: var(--matrix-text);
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Matrix rain effect */
-body::before {
+/* Matrix rain effect - only in dark mode */
+.dark body::before {
   content: "";
   position: fixed;
   top: 0;
@@ -53,6 +76,38 @@ body::before {
       transparent 74%,
       rgba(0, 255, 0, 0.05) 75%,
       rgba(0, 255, 0, 0.05) 76%,
+      transparent 77%,
+      transparent
+    );
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Light mode background pattern */
+.light body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: radial-gradient(
+      circle at 20% 50%,
+      transparent 20%,
+      rgba(5, 150, 105, 0.02) 21%,
+      rgba(5, 150, 105, 0.02) 34%,
+      transparent 35%,
+      transparent
+    ),
+    linear-gradient(
+      0deg,
+      transparent 24%,
+      rgba(5, 150, 105, 0.03) 25%,
+      rgba(5, 150, 105, 0.03) 26%,
+      transparent 27%,
+      transparent 74%,
+      rgba(5, 150, 105, 0.03) 75%,
+      rgba(5, 150, 105, 0.03) 76%,
       transparent 77%,
       transparent
     );
@@ -95,6 +150,47 @@ body::before {
   animation: matrix-glow 3s infinite;
 }
 
+/* Theme-aware utilities */
+.bg-matrix-bg {
+  background-color: var(--matrix-bg);
+}
+
+.bg-matrix-dark-bg {
+  background-color: var(--matrix-dark-bg);
+}
+
+.bg-matrix-card-bg {
+  background-color: var(--matrix-card-bg);
+}
+
+.text-matrix-text {
+  color: var(--matrix-text);
+}
+
+.text-matrix-text-secondary {
+  color: var(--matrix-text-secondary);
+}
+
+.text-matrix-green {
+  color: var(--matrix-green);
+}
+
+.text-matrix-dark-green {
+  color: var(--matrix-dark-green);
+}
+
+.text-matrix-light-green {
+  color: var(--matrix-light-green);
+}
+
+.border-matrix-border {
+  border-color: var(--matrix-border);
+}
+
+.border-matrix-green {
+  border-color: var(--matrix-green);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
@@ -111,4 +207,9 @@ body::before {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--matrix-light-green);
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
