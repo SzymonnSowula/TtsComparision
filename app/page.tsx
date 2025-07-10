@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useTheme } from "next-themes"
 import { generateTTSAudio, TTS_SERVICES, type TTSRequest, type TTSResult } from "@/lib/tts-services"
 
@@ -16,13 +17,30 @@ export default function MatrixTTSComparison() {
   const [text, setText] = useState("Hello, this is a test of text-to-speech synthesis.")
   const [language, setLanguage] = useState("en")
   const [voiceGender, setVoiceGender] = useState<"male" | "female">("female")
+  const [selectedServices, setSelectedServices] = useState<string[]>(TTS_SERVICES.map((s) => s.id))
   const [isGenerating, setIsGenerating] = useState(false)
   const [results, setResults] = useState<TTSResult[]>([])
   const [playingAudio, setPlayingAudio] = useState<string | null>(null)
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({})
 
+  const handleServiceToggle = (serviceId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedServices((prev) => [...prev, serviceId])
+    } else {
+      setSelectedServices((prev) => prev.filter((id) => id !== serviceId))
+    }
+  }
+
+  const handleSelectAll = () => {
+    setSelectedServices(TTS_SERVICES.map((s) => s.id))
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedServices([])
+  }
+
   const handleGenerate = async () => {
-    if (!text.trim()) return
+    if (!text.trim() || selectedServices.length === 0) return
 
     setIsGenerating(true)
     setResults([])
@@ -34,8 +52,9 @@ export default function MatrixTTSComparison() {
     }
 
     const newResults: TTSResult[] = []
+    const servicesToTest = TTS_SERVICES.filter((service) => selectedServices.includes(service.id))
 
-    for (const service of TTS_SERVICES) {
+    for (const service of servicesToTest) {
       try {
         console.log(`Generating audio for ${service.name}...`)
         const result = await generateTTSAudio(service.id, request)
@@ -183,6 +202,7 @@ export default function MatrixTTSComparison() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="pl">Polski</SelectItem>
                       <SelectItem value="es">Spanish</SelectItem>
                       <SelectItem value="fr">French</SelectItem>
                       <SelectItem value="de">German</SelectItem>
@@ -207,14 +227,59 @@ export default function MatrixTTSComparison() {
                   </Select>
                 </div>
 
-                <Button onClick={handleGenerate} disabled={isGenerating || !text.trim()} className="btn-matrix w-full">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <Label className="matrix-text">TTS Services</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAll}
+                        className="text-xs h-7 bg-transparent"
+                      >
+                        Select All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDeselectAll}
+                        className="text-xs h-7 bg-transparent"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {TTS_SERVICES.map((service) => (
+                      <div key={service.id} className="flex items-center space-x-3">
+                        <Checkbox
+                          id={service.id}
+                          checked={selectedServices.includes(service.id)}
+                          onCheckedChange={(checked) => handleServiceToggle(service.id, checked as boolean)}
+                        />
+                        <Label htmlFor={service.id} className="flex items-center gap-2 cursor-pointer">
+                          <Badge className={`${service.color} text-white text-xs`}>{service.name}</Badge>
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Selected: {selectedServices.length} of {TTS_SERVICES.length} services
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !text.trim() || selectedServices.length === 0}
+                  className="btn-matrix w-full"
+                >
                   {isGenerating ? (
                     <>
                       <div className="spinner mr-2" />
                       Generating...
                     </>
                   ) : (
-                    "Generate All"
+                    `Generate ${selectedServices.length > 0 ? `(${selectedServices.length})` : ""}`
                   )}
                 </Button>
               </CardContent>
@@ -232,7 +297,7 @@ export default function MatrixTTSComparison() {
                 {results.length === 0 ? (
                   <div className="text-center py-12 text-gray-400">
                     <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Configure your settings and click "Generate All" to start comparison</p>
+                    <p>Select TTS services and click "Generate" to start comparison</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
